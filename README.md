@@ -1,0 +1,1 @@
+To use the thremostability scoring algorithm run the git clone https://github.com/raghavagps/pptstab.git command using your terminal, install the environment using the provided environment.yml file and run the therm.ipynb notebook
