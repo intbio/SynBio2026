@@ -51,34 +51,21 @@ def train_epoch(model, dataloader, optimizer, criterion, device, accumulation_st
         loss = criterion(predictions, targets)
         
         # Backward pass с накоплением градиентов
-        loss = loss / accumulation_steps
+        optimizer.zero_grad()
         loss.backward()
-        
-        # Обновляем веса после accumulation_steps шагов
-        if (batch_idx + 1) % accumulation_steps == 0:
-            # Gradient clipping для стабильности
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-            optimizer.zero_grad()
+        optimizer.step()
+
         
         # Статистика
-        total_loss += loss.item() * accumulation_steps
+        total_loss += loss.item()
         all_predictions.extend(predictions.detach().cpu().numpy())
         all_targets.extend(targets.cpu().numpy())
         
-        # Логируем loss каждый батч (опционально)
-        if writer and batch_idx % 100 == 0:
-            global_step = epoch * len(dataloader) + batch_idx
-            writer.add_scalar('Batch/TrainLoss', loss.item() * accumulation_steps, global_step)
+        global_step = epoch * len(dataloader) + batch_idx
+        writer.add_scalar('Batch/TrainLoss', loss.item(), global_step)
         
         # Обновляем прогресс-бар
-        pbar.set_postfix({'loss': loss.item() * accumulation_steps})
-    
-    # Обработка остаточных градиентов
-    if (batch_idx + 1) % accumulation_steps != 0:
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
-        optimizer.zero_grad()
+        pbar.set_postfix({'loss': loss.item()})
     
     avg_loss = total_loss / len(dataloader)
     
@@ -163,6 +150,10 @@ def validate_epoch(model, dataloader, criterion, device, writer=None, epoch=0):
 
 def create_scatter_plot(targets, predictions, epoch):
     """Создаёт scatter plot для TensorBoard"""
+    
+    targets = targets.flatten()
+    predictions = predictions.flatten()
+    
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.scatter(targets, predictions, alpha=0.5, s=10)
     
@@ -249,7 +240,7 @@ def train_model(model,
     )
     
     # Функция потерь
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     
     # Логируем гиперпараметры
     writer.add_hparams({
@@ -293,7 +284,8 @@ def train_model(model,
             accumulation_steps, writer, epoch
         )
         
-        # Валидация
+        if not val_loader:
+            continue
         val_loss, val_preds, val_targets, val_metrics = validate_epoch(
             model, val_loader, criterion, device, writer, epoch
         )
